@@ -20,11 +20,44 @@ const HTML = `
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f0f2f5; }
     #map { height:100vh; width:100%; background:#e5e9f0; }
-
+    .ctrl-bar {
+      position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
+      display:flex; gap:8px; z-index:1000;
+      background:rgba(255,255,255,0.9); padding:8px 12px; border-radius:12px;
+      box-shadow:0 2px 12px rgba(0,0,0,0.3); backdrop-filter:blur(4px);
+    }
+    .ctrl-bar button {
+      padding:8px 14px; border:none; border-radius:8px; font-size:14px;
+      font-weight:600; cursor:pointer; transition:0.2s; white-space:nowrap;
+    }
+    .ctrl-bar button:hover { transform:scale(1.05); }
+    .btn-cold { background:#3498db; color:#fff; }
+    .btn-hot { background:#e74c3c; color:#fff; }
+    .btn-tracker { background:#8e44ad; color:#fff; }
+    .btn-tracker.active { background:#f1c40f; color:#000; }
+    .tracker-info {
+      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.8); color:#fff; padding:6px 14px; border-radius:8px;
+      font-size:13px; z-index:1000; display:none;
+    }
+    .marker-pulse {
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow:0 0 0 0 rgba(231,76,60,0.7); }
+      70% { box-shadow:0 0 0 12px rgba(231,76,60,0); }
+      100% { box-shadow:0 0 0 0 rgba(231,76,60,0); }
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div class="ctrl-bar">
+    <button class="btn-cold" id="btnCold">❄️ Холодное</button>
+    <button class="btn-hot" id="btnHot">🔥 Тёплое</button>
+    <button class="btn-tracker" id="btnTracker">📊 Трекер</button>
+  </div>
+  <div class="tracker-info" id="trackerInfo"></div>
 
   <script>
     const API_URL = '/api/sensors/all';
@@ -36,6 +69,9 @@ const HTML = `
     let sensorsData = [];
     const markers = {};
     const geoCache = {};
+    const tempHistory = {};
+    let trackerMode = false;
+    const CHANGE_THRESHOLD = 5;
 
     async function fetchLocation(lat, lng) {
       const key = \`\${lat.toFixed(2)}_\${lng.toFixed(2)}\`;
@@ -89,9 +125,16 @@ const HTML = `
         sensors.forEach(s => {
           const key = \`\${s.lat.toFixed(2)}_\${s.lng.toFixed(2)}\`;
           if (geoCache[key]) s.location = geoCache[key];
+          if (tempHistory[s.id] !== undefined) {
+            s.change = Math.abs(s.temperature - tempHistory[s.id]);
+          } else {
+            s.change = 0;
+          }
+          tempHistory[s.id] = s.temperature;
         });
         sensorsData = sensors;
         updateMap(sensorsData);
+        updateTrackerInfo();
         sensors.forEach(s => {
           const key = \`\${s.lat.toFixed(2)}_\${s.lng.toFixed(2)}\`;
           if (!geoCache[key]) {
@@ -145,10 +188,14 @@ const HTML = `
         if (humidity !== null && humidity !== undefined) popupContent += \`<br>💧 Влажность: \${humidity.toFixed(1)}%\`;
         if (sensor.location) popupContent += \`<br>🏘️ \${sensor.location}\`;
         popupContent += \`<br>📍 \${lat.toFixed(4)}, \${lng.toFixed(4)}\`;
+        if (sensor.change >= CHANGE_THRESHOLD) popupContent += \`<br>⚡ Изменение: +\${sensor.change.toFixed(1)}°C\`;
         popupContent += \`<br>🕒 \${new Date(timestamp).toLocaleString()}\`;
+        const isChanged = trackerMode && sensor.change >= CHANGE_THRESHOLD;
+        const pulseClass = isChanged ? ' marker-pulse' : '';
+        const borderColor = isChanged ? '#e74c3c' : 'white';
         const icon = L.divIcon({
           className: 'custom-div-icon',
-          html: \`<div style="background-color:\${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 0 8px rgba(0,0,0,0.7);"></div>\`,
+          html: \`<div class="\${pulseClass}" style="background-color:\${color}; width:16px; height:16px; border-radius:50%; border:2px solid \${borderColor}; box-shadow:0 0 8px rgba(0,0,0,0.7);"></div>\`,
           iconSize: [16,16], iconAnchor: [8,8]
         });
         if (markers[id]) {
@@ -161,6 +208,40 @@ const HTML = `
         }
       });
     }
+
+    function findExtreme(type) {
+      if (!sensorsData || sensorsData.length === 0) return;
+      const target = type === 'cold'
+        ? sensorsData.reduce((a,b) => a.temperature < b.temperature ? a : b)
+        : sensorsData.reduce((a,b) => a.temperature > b.temperature ? a : b);
+      if (!target) return;
+      map.setView([target.lat, target.lng], 11);
+      const marker = markers[target.id];
+      if (marker) marker.openPopup();
+    }
+    document.getElementById('btnCold').addEventListener('click', () => findExtreme('cold'));
+    document.getElementById('btnHot').addEventListener('click', () => findExtreme('hot'));
+
+    function updateTrackerInfo() {
+      const el = document.getElementById('trackerInfo');
+      if (!trackerMode) { el.style.display = 'none'; return; }
+      const changed = sensorsData.filter(s => s.change >= CHANGE_THRESHOLD);
+      if (changed.length === 0) {
+        el.textContent = '✅ Резких изменений нет';
+        el.style.display = 'block';
+      } else {
+        el.textContent = \`⚠️ \${changed.length} датчиков: \${changed.map(s => s.name + ' ' + s.change.toFixed(1) + '°').join(', ')}\`;
+        el.style.display = 'block';
+      }
+    }
+
+    function setTrackerMode(on) {
+      trackerMode = on;
+      document.getElementById('btnTracker').classList.toggle('active', on);
+      updateTrackerInfo();
+      updateMap(sensorsData);
+    }
+    document.getElementById('btnTracker').addEventListener('click', () => setTrackerMode(!trackerMode));
 
     fetchSensors();
     setInterval(fetchSensors, REFRESH_INTERVAL);
