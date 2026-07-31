@@ -20,21 +20,42 @@ const HTML = `
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f0f2f5; }
     #map { height:100vh; width:100%; background:#e5e9f0; }
-    .ctrl-bar {
-      position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
-      display:flex; gap:8px; z-index:1000;
-      background:rgba(255,255,255,0.9); padding:8px 12px; border-radius:12px;
-      box-shadow:0 2px 12px rgba(0,0,0,0.3); backdrop-filter:blur(4px);
+    .menu-btn {
+      position:fixed; top:15px; left:15px; z-index:1000;
+      background:#2c3e50; color:#fff; border:none; border-radius:10px;
+      padding:10px 16px; font-size:15px; font-weight:700; cursor:pointer;
+      box-shadow:0 2px 12px rgba(0,0,0,0.3); transition:0.2s;
     }
-    .ctrl-bar button {
-      padding:8px 14px; border:none; border-radius:8px; font-size:14px;
+    .menu-btn:hover { background:#34495e; }
+    .menu-panel {
+      position:fixed; top:15px; left:15px; z-index:999;
+      background:rgba(255,255,255,0.96); border-radius:12px;
+      box-shadow:0 4px 20px rgba(0,0,0,0.35); padding:16px;
+      min-width:280px; max-height:85vh; overflow-y:auto;
+      display:none; backdrop-filter:blur(4px);
+    }
+    .menu-panel.open { display:block; }
+    .menu-panel h4 { margin:0 0 10px 0; font-size:16px; border-bottom:2px solid #eee; padding-bottom:6px; }
+    .menu-panel .btn-group { display:flex; gap:8px; margin:0 0 14px 0; flex-wrap:wrap; }
+    .menu-panel .btn-group button {
+      flex:1; padding:8px 10px; border:none; border-radius:8px; font-size:13px;
       font-weight:600; cursor:pointer; transition:0.2s; white-space:nowrap;
     }
-    .ctrl-bar button:hover { transform:scale(1.05); }
     .btn-cold { background:#3498db; color:#fff; }
+    .btn-cold:hover { background:#2980b9; }
     .btn-hot { background:#e74c3c; color:#fff; }
+    .btn-hot:hover { background:#c0392b; }
     .btn-tracker { background:#8e44ad; color:#fff; }
     .btn-tracker.active { background:#f1c40f; color:#000; }
+    .top-list { margin-bottom:14px; }
+    .top-item {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; transition:0.15s;
+    }
+    .top-item:hover { background:#f0f4f8; }
+    .top-item .rank { font-weight:800; color:#999; margin-right:6px; }
+    .top-item.cold .temp { color:#3498db; font-weight:700; }
+    .top-item.hot .temp { color:#e74c3c; font-weight:700; }
     .tracker-info {
       position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
       background:rgba(0,0,0,0.8); color:#fff; padding:6px 14px; border-radius:8px;
@@ -66,10 +87,18 @@ const HTML = `
     <div><span class="soil">🌱 Почва: <span id="counterSoil">0</span></span></div>
     <div><span class="air">💨 Воздух: <span id="counterAir">0</span></span></div>
   </div>
-  <div class="ctrl-bar">
-    <button class="btn-cold" id="btnCold">❄️ Холодное</button>
-    <button class="btn-hot" id="btnHot">🔥 Тёплое</button>
-    <button class="btn-tracker" id="btnTracker">📊 Трекер</button>
+  <button class="menu-btn" id="btnMenu">☰ Меню</button>
+  <div class="menu-panel" id="menuPanel">
+    <h4>Управление</h4>
+    <div class="btn-group">
+      <button class="btn-cold" id="btnCold">❄️ Холодное</button>
+      <button class="btn-hot" id="btnHot">🔥 Тёплое</button>
+      <button class="btn-tracker" id="btnTracker">📊 Трекер</button>
+    </div>
+    <h4>🔥 Топ-5 тёплых</h4>
+    <div class="top-list" id="topHotList"></div>
+    <h4>❄️ Топ-5 холодных</h4>
+    <div class="top-list" id="topColdList"></div>
   </div>
   <div class="tracker-info" id="trackerInfo"></div>
 
@@ -150,6 +179,7 @@ const HTML = `
         updateMap(sensorsData);
         updateTrackerInfo();
         updateCounter();
+        updateTopLists();
         sensors.forEach(s => {
           const key = \`\${s.lat.toFixed(2)}_\${s.lng.toFixed(2)}\`;
           if (!geoCache[key]) {
@@ -232,6 +262,29 @@ const HTML = `
       document.getElementById('counterSoil').textContent = soilCount;
       document.getElementById('counterAir').textContent = airCount;
     }
+
+    function zoomToSensor(id) {
+      const s = sensorsData.find(x => x.id === id);
+      if (!s) return;
+      map.setView([s.lat, s.lng], 11);
+      const marker = markers[id];
+      if (marker) marker.openPopup();
+    }
+
+    function updateTopLists() {
+      if (sensorsData.length === 0) return;
+      const sortedHot = [...sensorsData].sort((a,b) => b.temperature - a.temperature).slice(0,5);
+      const sortedCold = [...sensorsData].sort((a,b) => a.temperature - b.temperature).slice(0,5);
+      const hotList = document.getElementById('topHotList');
+      const coldList = document.getElementById('topColdList');
+      hotList.innerHTML = sortedHot.map((s,i) => \`<div class="top-item hot" onclick="zoomToSensor('\${s.id}')"><span><span class="rank">\${i+1}</span>\${s.name || s.id}</span><span class="temp">\${s.temperature.toFixed(1)}°</span></div>\`).join('') || '<div style="color:#999">Нет данных</div>';
+      coldList.innerHTML = sortedCold.map((s,i) => \`<div class="top-item cold" onclick="zoomToSensor('\${s.id}')"><span><span class="rank">\${i+1}</span>\${s.name || s.id}</span><span class="temp">\${s.temperature.toFixed(1)}°</span></div>\`).join('') || '<div style="color:#999">Нет данных</div>';
+    }
+
+    document.getElementById('btnMenu').addEventListener('click', () => {
+      document.getElementById('menuPanel').classList.toggle('open');
+      updateTopLists();
+    });
 
     function findExtreme(type) {
       if (!sensorsData || sensorsData.length === 0) return;
