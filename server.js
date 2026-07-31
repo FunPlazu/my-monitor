@@ -394,6 +394,10 @@ app.get('/api/sensors/all', async (req, res) => {
     ]);
 
     const all = [...soil, ...air];
+    all.push({
+      id: 'moscow_test', name: 'Датчик Москва', lat: 55.556604, lng: 37.422683,
+      temperature: -5.2, humidity: null, sensorType: 'air', timestamp: Date.now()
+    });
     console.log(`✅ Всего загружено ${all.length} датчиков (почва: ${soil.length}, воздух: ${air.length})`);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
