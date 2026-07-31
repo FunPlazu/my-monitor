@@ -28,7 +28,7 @@ const HTML = `
     }
     .menu-btn:hover { background:#34495e; }
     .menu-panel {
-      position:fixed; top:15px; left:15px; z-index:999;
+      position:fixed; top:15px; left:15px; z-index:1001;
       background:rgba(255,255,255,0.96); border-radius:12px;
       box-shadow:0 4px 20px rgba(0,0,0,0.35); padding:16px;
       min-width:280px; max-height:85vh; overflow-y:auto;
@@ -36,6 +36,11 @@ const HTML = `
     }
     .menu-panel.open { display:block; }
     .menu-panel h4 { margin:0 0 10px 0; font-size:16px; border-bottom:2px solid #eee; padding-bottom:6px; }
+    .menu-close {
+      position:absolute; top:10px; right:10px; border:none; background:#e74c3c;
+      color:#fff; border-radius:6px; width:26px; height:26px; font-weight:800;
+      cursor:pointer; font-size:14px; line-height:1;
+    }
     .menu-panel .btn-group { display:flex; gap:8px; margin:0 0 14px 0; flex-wrap:wrap; }
     .menu-panel .btn-group button {
       flex:1; padding:8px 10px; border:none; border-radius:8px; font-size:13px;
@@ -89,6 +94,7 @@ const HTML = `
   </div>
   <button class="menu-btn" id="btnMenu">☰ Меню</button>
   <div class="menu-panel" id="menuPanel">
+    <button class="menu-close" id="btnMenuClose">✕</button>
     <h4>Управление</h4>
     <div class="btn-group">
       <button class="btn-cold" id="btnCold">❄️ Холодное</button>
@@ -106,7 +112,8 @@ const HTML = `
     const API_URL = '/api/sensors/all';
     const REFRESH_INTERVAL = 60000;
 
-    const map = L.map('map', { center: [22,80], zoom:5, minZoom:4, maxZoom:12 });
+    const map = L.map('map', { center: [22,80], zoom:5, minZoom:4, maxZoom:12, zoomControl:false });
+    L.control.zoom({ position:'bottomleft' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
 
     let sensorsData = [];
@@ -281,10 +288,17 @@ const HTML = `
       coldList.innerHTML = sortedCold.map((s,i) => \`<div class="top-item cold" onclick="zoomToSensor('\${s.id}')"><span><span class="rank">\${i+1}</span>\${s.name || s.id}</span><span class="temp">\${s.temperature.toFixed(1)}°</span></div>\`).join('') || '<div style="color:#999">Нет данных</div>';
     }
 
-    document.getElementById('btnMenu').addEventListener('click', () => {
-      document.getElementById('menuPanel').classList.toggle('open');
+    function openMenu() {
+      document.getElementById('menuPanel').classList.add('open');
+      document.getElementById('btnMenu').style.display = 'none';
       updateTopLists();
-    });
+    }
+    function closeMenu() {
+      document.getElementById('menuPanel').classList.remove('open');
+      document.getElementById('btnMenu').style.display = 'block';
+    }
+    document.getElementById('btnMenu').addEventListener('click', openMenu);
+    document.getElementById('btnMenuClose').addEventListener('click', closeMenu);
 
     function findExtreme(type) {
       if (!sensorsData || sensorsData.length === 0) return;
