@@ -43,6 +43,15 @@ const HTML = `
     .marker-pulse {
       animation: pulse 1s infinite;
     }
+    .counter {
+      position:fixed; top:15px; right:15px; z-index:1000;
+      background:rgba(255,255,255,0.92); padding:10px 16px; border-radius:12px;
+      box-shadow:0 2px 12px rgba(0,0,0,0.3); font-size:14px; backdrop-filter:blur(4px);
+      text-align:right; line-height:1.5;
+    }
+    .counter .num { font-weight:800; font-size:20px; color:#2c3e50; }
+    .counter .soil { color:#2ecc71; }
+    .counter .air { color:#9b59b6; }
     @keyframes pulse {
       0% { box-shadow:0 0 0 0 rgba(231,76,60,0.7); }
       70% { box-shadow:0 0 0 12px rgba(231,76,60,0); }
@@ -52,6 +61,11 @@ const HTML = `
 </head>
 <body>
   <div id="map"></div>
+  <div class="counter" id="counter">
+    <div><span class="num" id="counterTotal">0</span> всего</div>
+    <div><span class="soil">🌱 Почва: <span id="counterSoil">0</span></span></div>
+    <div><span class="air">💨 Воздух: <span id="counterAir">0</span></span></div>
+  </div>
   <div class="ctrl-bar">
     <button class="btn-cold" id="btnCold">❄️ Холодное</button>
     <button class="btn-hot" id="btnHot">🔥 Тёплое</button>
@@ -135,6 +149,7 @@ const HTML = `
         sensorsData = sensors;
         updateMap(sensorsData);
         updateTrackerInfo();
+        updateCounter();
         sensors.forEach(s => {
           const key = \`\${s.lat.toFixed(2)}_\${s.lng.toFixed(2)}\`;
           if (!geoCache[key]) {
@@ -154,6 +169,7 @@ const HTML = `
         console.error('❌ Ошибка:', err);
         sensorsData = [];
         updateMap([]);
+        updateCounter();
       }
     }
 
@@ -207,6 +223,14 @@ const HTML = `
           markers[id] = marker;
         }
       });
+    }
+
+    function updateCounter() {
+      const soilCount = sensorsData.filter(s => s.sensorType !== 'air').length;
+      const airCount = sensorsData.filter(s => s.sensorType === 'air').length;
+      document.getElementById('counterTotal').textContent = sensorsData.length;
+      document.getElementById('counterSoil').textContent = soilCount;
+      document.getElementById('counterAir').textContent = airCount;
     }
 
     function findExtreme(type) {
